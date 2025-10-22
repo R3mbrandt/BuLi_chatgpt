@@ -22,6 +22,7 @@ BASE_URL = "https://api.sportmonks.com/v3/football"
 DEFAULT_LEAGUE_NAME = "Bundesliga"
 GERMANY_COUNTRY_ID = 11  # Stable identifier for Germany in Sportmonks
 
+
 def require_token() -> str:
     token = os.getenv("SPORTMONKS_API_TOKEN")
     if not token:
@@ -31,9 +32,10 @@ def require_token() -> str:
         )
     return token
 
+
 def api_get(endpoint: str, *, token: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Execute a GET request against the Sportmonks API and return the payload."""
-    url = f"{BASE_URL}/{endpoint.strip('/') }"
+    url = f"{BASE_URL}/{endpoint.strip('/')}"
     query: Dict[str, Any] = {"api_token": token}
     if params:
         query.update(params)
@@ -44,23 +46,77 @@ def api_get(endpoint: str, *, token: str, params: Optional[Dict[str, Any]] = Non
         raise ValueError(f"Unexpected response format from {url!r}: {payload!r}")
     return payload
 
-def find_league(*, token: str, name: str = DEFAULT_LEAGUE_NAME, country_id: Optional[int] = GERMANY_COUNTRY_ID) -> Dict[str, Any]:
-    """Return the first league matching by name (and optional country)."""
-    leagues = api_get(
+
+def find_league(
+    *,
+    token: str,
+    name: str = DEFAULT_LEAGUE_NAME,
+    country_id: Optional[int] = GERMANY_COUNTRY_ID,
+) -> Dict[str, Any]:
+    """Return the first league matching by name (and optional country).
+
+    We try multiple lookup strategies to make the helper resilient against
+    pagination quirks or naming variations in the API responses.
+    """
+
+    def _matches(candidate: Dict[str, Any]) -> bool:
+        label = candidate.get("name", "")
+        if name.lower() not in label.lower():
+            return False
+        if country_id is None:
+            return True
+        country = candidate.get("country") or {}
+        candidate_country_id = (
+            country.get("id")
+            if isinstance(country, dict)
+            else candidate.get("country_id")
+        )
+        return candidate_country_id == country_id
+
+    def _try_candidates(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        data: Iterable[Dict[str, Any]] = payload.get("data", [])
+        for item in data:
+            if _matches(item):
+                return item
+        return None
+
+    # 1) Use dedicated search endpoint (supports substring matching)
+    try:
+        search_response = api_get(
+            f"leagues/search/{name}",
+            token=token,
+            params={"include": "country"},
+        )
+    except requests.HTTPError:
+        search_response = {}
+    else:
+        found = _try_candidates(search_response)
+        if found:
+            return found
+
+    # 2) Fetch leagues limited to the given country (if provided)
+    if country_id is not None:
+        country_response = api_get(
+            f"leagues/countries/{country_id}",
+            token=token,
+            params={"include": "country"},
+        )
+        found = _try_candidates(country_response)
+        if found:
+            return found
+
+    # 3) Fall back to a larger paginated list
+    fallback_response = api_get(
         "leagues",
         token=token,
-        params={"per_page": 50, "include": "country"},
+        params={"per_page": 200, "include": "country"},
     )
-    data: Iterable[Dict[str, Any]] = leagues.get("data", [])
-    for league in data:
-        if name.lower() not in league.get("name", "").lower():
-            continue
-        if country_id is not None:
-            country = league.get("country") or {}
-            if country.get("id") != country_id:
-                continue
-        return league
-    raise LookupError(f"Could not find league named '{name}' in response")
+    found = _try_candidates(fallback_response)
+    if found:
+        return found
+
+    raise LookupError(f"Could not find league named '{name}' in Sportmonks response")
+
 
 def fetch_season_details(season_id: int, *, token: str) -> Dict[str, Any]:
     return api_get(
@@ -69,6 +125,7 @@ def fetch_season_details(season_id: int, *, token: str) -> Dict[str, Any]:
         params={"include": "league,stages"},
     )
 
+
 def fetch_recent_fixtures(season_id: int, *, token: str, limit: int = 5) -> Dict[str, Any]:
     return api_get(
         f"fixtures/seasons/{season_id}",
@@ -76,8 +133,15 @@ def fetch_recent_fixtures(season_id: int, *, token: str, limit: int = 5) -> Dict
         params={"per_page": limit, "include": "participants"},
     )
 
+
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sportmonks Bundesliga data fetch test")
+    parser.add_argument(
+        "--league-id",
+        type=int,
+        default=None,
+        help="Optional league id to fetch directly (skips name lookup)",
+    )
     parser.add_argument(
         "--league-name",
         default=DEFAULT_LEAGUE_NAME,
@@ -97,12 +161,25 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     )
     return parser.parse_args(argv)
 
+
 def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parse_args(argv)
     try:
         token = require_token()
         country_id = None if args.country_id < 0 else args.country_id
-        league = find_league(token=token, name=args.league_name, country_id=country_id)
+
+        if args.league_id is not None:
+            league_response = api_get(
+                f"leagues/{args.league_id}",
+                token=token,
+                params={"include": "country"},
+            )
+            league = league_response.get("data") or {}
+            if not league:
+                raise LookupError(f"Could not find league with id {args.league_id}")
+        else:
+            league = find_league(token=token, name=args.league_name, country_id=country_id)
+
         league_id = league["id"]
         season_id = league.get("currentseason_id")
         print(f"League: {league['name']} (ID={league_id}, Current Season={season_id})")
@@ -136,6 +213,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
