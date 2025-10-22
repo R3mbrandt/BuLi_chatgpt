@@ -47,40 +47,36 @@ def api_get(endpoint: str, *, token: str, params: Optional[Dict[str, Any]] = Non
     return payload
 
 
-def find_league(
-    *,
-    token: str,
-    name: str = DEFAULT_LEAGUE_NAME,
-    country_id: Optional[int] = GERMANY_COUNTRY_ID,
-) -> Dict[str, Any]:
-    """Return the first league matching by name (and optional country).
+def _matches_league(
+    candidate: Dict[str, Any], *, name: str, country_id: Optional[int]
+) -> bool:
+    label = candidate.get("name", "")
+    if name.lower() not in label.lower():
+        return False
+    if country_id is None:
+        return True
+    country = candidate.get("country") or {}
+    candidate_country_id = (
+        country.get("id") if isinstance(country, dict) else candidate.get("country_id")
+    )
+    return candidate_country_id == country_id
 
-    We try multiple lookup strategies to make the helper resilient against
-    pagination quirks or naming variations in the API responses.
-    """
 
-    def _matches(candidate: Dict[str, Any]) -> bool:
-        label = candidate.get("name", "")
-        if name.lower() not in label.lower():
-            return False
-        if country_id is None:
-            return True
-        country = candidate.get("country") or {}
-        candidate_country_id = (
-            country.get("id")
-            if isinstance(country, dict)
-            else candidate.get("country_id")
-        )
-        return candidate_country_id == country_id
+def _select_league_candidate(
+    payload: Dict[str, Any], *, name: str, country_id: Optional[int]
+) -> Optional[Dict[str, Any]]:
+    data: Iterable[Dict[str, Any]] = payload.get("data", [])
+    for item in data:
+        if _matches_league(item, name=name, country_id=country_id):
+            return item
+    return None
 
-    def _try_candidates(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        data: Iterable[Dict[str, Any]] = payload.get("data", [])
-        for item in data:
-            if _matches(item):
-                return item
-        return None
 
-    # 1) Use dedicated search endpoint (supports substring matching)
+def find_league_id(
+    *, token: str, name: str = DEFAULT_LEAGUE_NAME, country_id: Optional[int] = GERMANY_COUNTRY_ID
+) -> int:
+    """Resolve a league id using the dedicated Sportmonks search endpoint."""
+
     try:
         search_response = api_get(
             f"leagues/search/{name}",
@@ -89,33 +85,41 @@ def find_league(
         )
     except requests.HTTPError:
         search_response = {}
-    else:
-        found = _try_candidates(search_response)
-        if found:
-            return found
 
-    # 2) Fetch leagues limited to the given country (if provided)
+    candidate = _select_league_candidate(
+        search_response, name=name, country_id=country_id
+    )
+    if candidate and candidate.get("id"):
+        return int(candidate["id"])
+
+    # Fallback to country-filtered listing if search yields no usable result.
     if country_id is not None:
         country_response = api_get(
             f"leagues/countries/{country_id}",
             token=token,
             params={"include": "country"},
         )
-        found = _try_candidates(country_response)
-        if found:
-            return found
+        candidate = _select_league_candidate(
+            country_response, name=name, country_id=country_id
+        )
+        if candidate and candidate.get("id"):
+            return int(candidate["id"])
 
-    # 3) Fall back to a larger paginated list
+    # Full list fallback (still useful when filters are misconfigured)
     fallback_response = api_get(
         "leagues",
         token=token,
         params={"per_page": 200, "include": "country"},
     )
-    found = _try_candidates(fallback_response)
-    if found:
-        return found
+    candidate = _select_league_candidate(
+        fallback_response, name=name, country_id=country_id
+    )
+    if candidate and candidate.get("id"):
+        return int(candidate["id"])
 
-    raise LookupError(f"Could not find league named '{name}' in Sportmonks response")
+    raise LookupError(
+        f"Could not find league named '{name}' in Sportmonks response via search endpoint"
+    )
 
 
 def fetch_season_details(season_id: int, *, token: str) -> Dict[str, Any]:
@@ -159,6 +163,11 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         default=5,
         help="Number of fixtures to fetch for the current season (default: 5)",
     )
+    parser.add_argument(
+        "--show-search",
+        action="store_true",
+        help="Print the raw league search matches before fetching details",
+    )
     return parser.parse_args(argv)
 
 
@@ -169,18 +178,40 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         country_id = None if args.country_id < 0 else args.country_id
 
         if args.league_id is not None:
-            league_response = api_get(
-                f"leagues/{args.league_id}",
+            league_id = args.league_id
+        else:
+            league_id = find_league_id(
+                token=token, name=args.league_name, country_id=country_id
+            )
+
+        if args.show_search:
+            search_response = api_get(
+                f"leagues/search/{args.league_name}",
                 token=token,
                 params={"include": "country"},
             )
-            league = league_response.get("data") or {}
-            if not league:
-                raise LookupError(f"Could not find league with id {args.league_id}")
-        else:
-            league = find_league(token=token, name=args.league_name, country_id=country_id)
+            matches = search_response.get("data", [])
+            print("Search matches:")
+            for match in matches:
+                country = match.get("country") or {}
+                country_name = (
+                    country.get("name")
+                    if isinstance(country, dict)
+                    else match.get("country_name")
+                )
+                print(
+                    f"  - {match.get('name')} (ID={match.get('id')}, Country={country_name})"
+                )
 
-        league_id = league["id"]
+        league_response = api_get(
+            f"leagues/{league_id}",
+            token=token,
+            params={"include": "country"},
+        )
+        league = league_response.get("data") or {}
+        if not league:
+            raise LookupError(f"Could not find league with id {league_id}")
+
         season_id = league.get("currentseason_id")
         print(f"League: {league['name']} (ID={league_id}, Current Season={season_id})")
 

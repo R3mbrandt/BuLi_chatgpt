@@ -11,7 +11,11 @@ Dieses Repository enthält erste Experimente für ein Bundesliga-Analyse-Setup.
 
 Das Skript `scripts/sportmonks_fetch.py` ruft exemplarisch Bundesliga-Daten
 ab, um die API-Anbindung zu testen. Es lädt die Ligendetails, Metadaten zur
-aktuellen Saison sowie eine kleine Menge an Spielansetzungen.
+aktuellen Saison sowie eine kleine Menge an Spielansetzungen. Die Liga wird
+standardmäßig über den **League Search Endpoint** aufgelöst, sodass die
+korrekte ID der Bundesliga automatisch gefunden wird. Alternativ kannst du
+die ID mit `--show-search` anzeigen oder direkt über `--league-id`
+adressieren.
 
 ```bash
 export SPORTMONKS_API_TOKEN=dein_token
@@ -23,6 +27,18 @@ Wettbewerbe zu testen.
 
 ```bash
 python scripts/sportmonks_fetch.py --league-name "2. Bundesliga" --fixtures 2
+```
+
+Um die Treffer des League-Search-Endpunkts einzusehen (inklusive IDs):
+
+```bash
+python scripts/sportmonks_fetch.py --show-search
+```
+
+Bei Bedarf kann die Liga-ID verwendet werden, um Namensvarianten zu umgehen:
+
+```bash
+python scripts/sportmonks_fetch.py --league-id 82
 ```
 
 Die Ausgabe erfolgt als einfache Textliste im Terminal.
