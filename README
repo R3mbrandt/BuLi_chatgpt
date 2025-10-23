@@ -5,40 +5,30 @@ Dieses Repository enthält erste Experimente für ein Bundesliga-Analyse-Setup.
 ## Voraussetzungen
 
 - Python 3.10+
-- Ein gültiger Sportmonks Football API Token (`SPORTMONKS_API_TOKEN`).
+- Netzwerkzugang zur frei verfügbaren [OpenLigaDB](https://www.openligadb.de/) API.
 
-## Schneller Test der Sportmonks API
+## Schneller Test mit OpenLigaDB
 
-Das Skript `scripts/sportmonks_fetch.py` ruft exemplarisch Bundesliga-Daten
-ab, um die API-Anbindung zu testen. Es lädt die Ligendetails, Metadaten zur
-aktuellen Saison sowie eine kleine Menge an Spielansetzungen. Die Liga wird
-standardmäßig über den **League Search Endpoint** aufgelöst, sodass die
-korrekte ID der Bundesliga automatisch gefunden wird. Alternativ kannst du
-die ID mit `--show-search` anzeigen oder direkt über `--league-id`
-adressieren.
+Das Skript `scripts/openligadb_fetch.py` ruft exemplarisch Bundesliga-Daten
+über die OpenLigaDB-Endpunkte ab. Es ermittelt verfügbare Saisons, lädt die
+Spiele einer Saison oder eines konkreten Spieltags und gibt optional die Tabelle
+aus. Damit lässt sich ohne kostenpflichtigen API-Zugang ein grundlegender
+Datenabruf prüfen.
 
 ```bash
-export SPORTMONKS_API_TOKEN=dein_token
-python scripts/sportmonks_fetch.py --fixtures 3
+python scripts/openligadb_fetch.py --preview 8
 ```
 
-Optional lassen sich Ligabezeichnung und Länderfilter anpassen, z. B. um andere
-Wettbewerbe zu testen.
+Über weitere Parameter kannst du Saison, Spieltag oder die Liga-Kurzbezeichnung
+steuern:
 
 ```bash
-python scripts/sportmonks_fetch.py --league-name "2. Bundesliga" --fixtures 2
+python scripts/openligadb_fetch.py --season 2022 --matchday 5
+python scripts/openligadb_fetch.py --league-short bl2 --show-table
 ```
 
-Um die Treffer des League-Search-Endpunkts einzusehen (inklusive IDs):
-
-```bash
-python scripts/sportmonks_fetch.py --show-search
-```
-
-Bei Bedarf kann die Liga-ID verwendet werden, um Namensvarianten zu umgehen:
-
-```bash
-python scripts/sportmonks_fetch.py --league-id 82
-```
-
-Die Ausgabe erfolgt als einfache Textliste im Terminal.
+`bl1` steht für die 1. Bundesliga, `bl2` für die 2. Bundesliga. Eine Übersicht
+aller bekannten Kurzbezeichnungen findest du in der
+[OpenLigaDB-Dokumentation](https://www.openligadb.de/). Das Skript lädt immer
+zunächst die verfügbare Saisontabelle, sodass die aktuelle Saison automatisch
+gefunden wird.
