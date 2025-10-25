@@ -13,7 +13,10 @@ Das Skript `scripts/openligadb_fetch.py` ruft exemplarisch Bundesliga-Daten
 über die OpenLigaDB-Endpunkte ab. Es ermittelt verfügbare Saisons, lädt die
 Spiele einer Saison oder eines konkreten Spieltags und gibt optional die Tabelle
 aus. Damit lässt sich ohne kostenpflichtigen API-Zugang ein grundlegender
-Datenabruf prüfen.
+Datenabruf prüfen. Wenn OpenLigaDB für die kommende Saison noch Platzhalter ohne
+Teamnamen oder Anstoßzeiten liefert, springt das Skript automatisch auf die
+zuletzt verfügbare Saison mit echten Spieldaten und weist in der Ausgabe auf den
+Platzhalterstatus hin.
 
 ```bash
 python scripts/openligadb_fetch.py --preview 8

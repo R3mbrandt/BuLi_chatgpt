@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import sys
-from typing import Any, Iterable, List, Mapping, Optional
+from typing import Any, Iterable, List, Mapping, Optional, Tuple
 
 import requests
 
@@ -77,6 +77,34 @@ def fetch_matchday(league_short: str, season: int, matchday: Optional[int]) -> L
     if not isinstance(payload, list):
         raise SystemExit("Unexpected response format for match data")
     return payload
+
+
+def _match_has_named_teams(match: Mapping[str, Any]) -> bool:
+    team1 = match.get("Team1") or {}
+    team2 = match.get("Team2") or {}
+    return bool(team1.get("TeamName")) and bool(team2.get("TeamName"))
+
+
+def _find_latest_useful_season(
+    league_short: str,
+    seasons: Iterable[int],
+    matchday: Optional[int],
+) -> Tuple[int, List[Mapping[str, Any]], Optional[int], bool]:
+    """Return the newest season that already exposes real match data."""
+
+    seasons_list = list(seasons)
+    placeholder_source: Optional[int] = None
+    for season in seasons_list:
+        matches = fetch_matchday(league_short, season, matchday)
+        if any(_match_has_named_teams(match) for match in matches):
+            return season, matches, placeholder_source, False
+        if placeholder_source is None:
+            placeholder_source = season
+    if not seasons_list:
+        raise SystemExit(f"Keine Saisons für Liga {league_short!r} gefunden")
+    fallback_season = seasons_list[0]
+    matches = fetch_matchday(league_short, fallback_season, matchday)
+    return fallback_season, matches, placeholder_source or fallback_season, True
 
 
 def fetch_table(league_short: str, season: int) -> List[Mapping[str, Any]]:
@@ -167,18 +195,37 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not seasons:
         raise SystemExit(f"Keine Saisons für Liga {args.league_short!r} gefunden")
 
-    season = args.season or seasons[0]
-    if season not in seasons:
-        print(
-            f"Hinweis: Saison {season} ist für Liga {args.league_short} nicht gelistet. "
-            f"Verfügbare Saisons: {', '.join(map(str, seasons))}",
-            file=sys.stderr,
+    placeholder_source: Optional[int] = None
+    placeholder_only = False
+    if args.season is not None:
+        season = args.season
+        if season not in seasons:
+            print(
+                f"Hinweis: Saison {season} ist für Liga {args.league_short} nicht gelistet. "
+                f"Verfügbare Saisons: {', '.join(map(str, seasons))}",
+                file=sys.stderr,
+            )
+            season = seasons[0]
+        matches = fetch_matchday(args.league_short, season, args.matchday)
+    else:
+        season, matches, placeholder_source, placeholder_only = _find_latest_useful_season(
+            args.league_short, seasons, args.matchday
         )
-        season = seasons[0]
 
     print(f"Liga: {args.league_short} | Saison: {season}")
 
-    matches = fetch_matchday(args.league_short, season, args.matchday)
+    if placeholder_source is not None and placeholder_source != season:
+        print(
+            f"Hinweis: Saison {placeholder_source} enthielt noch keine angesetzten Partien. "
+            f"Es wird daher auf {season} zurückgegriffen."
+        )
+
+    if placeholder_only:
+        print(
+            "Hinweis: Die aktuellste Saison enthält bislang nur Platzhalterdaten. "
+            "Sobald OpenLigaDB Mannschaften und Termine veröffentlicht, erscheinen sie hier."
+        )
+
     if not matches:
         print("Keine Spiele gefunden.")
     else:
