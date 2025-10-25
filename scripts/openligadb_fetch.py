@@ -37,17 +37,34 @@ def _request_json(path: str) -> Any:
         raise SystemExit(f"Non-JSON response from {url!r}") from exc
 
 
-def fetch_available_seasons(league_short: str) -> List[int]:
-    payload = _request_json(f"getavailableleagues/{league_short}")
-    seasons: List[int] = []
-    for item in payload:
+def _extract_year(raw_season: Any) -> Optional[int]:
+    if raw_season is None:
+        return None
+    season_str = str(raw_season)
+    # Common formats are "2023" or "2023/2024" – grab the first four digits.
+    for token in season_str.replace("/", " ").split():
         try:
-            year = int(item.get("season", 0))
-        except (TypeError, ValueError):
+            year = int(token)
+        except ValueError:
             continue
-        if year:
-            seasons.append(year)
-    seasons.sort(reverse=True)
+        if 1900 < year < 2100:
+            return year
+    return None
+
+
+def fetch_available_seasons(league_short: str) -> List[int]:
+    payload = _request_json("getavailableleagues")
+    seasons: List[int] = []
+    short_normalized = league_short.lower()
+    for item in payload:
+        shortcut = str(item.get("leagueShortcut", "")).lower()
+        if shortcut != short_normalized:
+            continue
+        year = _extract_year(item.get("leagueSeason"))
+        if year is None:
+            continue
+        seasons.append(year)
+    seasons = sorted(set(seasons), reverse=True)
     return seasons
 
 
