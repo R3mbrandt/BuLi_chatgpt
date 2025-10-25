@@ -104,7 +104,12 @@ def format_match(match: Mapping[str, Any]) -> str:
     else:
         score = "-"
     matchday = match.get("Group", {}).get("GroupOrderID")
-    return f"MD{matchday:>2} {kickoff_str} {home} {score} {away}"
+    if isinstance(matchday, int):
+        matchday_str = f"MD{matchday:>2}"
+    else:
+        group_name = match.get("Group", {}).get("GroupName")
+        matchday_str = group_name or "MD ?"
+    return f"{matchday_str} {kickoff_str} {home} {score} {away}"
 
 
 def format_table_entry(entry: Mapping[str, Any]) -> str:
