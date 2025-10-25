@@ -184,6 +184,14 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Neben den Spielen auch die aktuelle Tabelle ausgeben",
     )
+    parser.add_argument(
+        "--table-season",
+        type=int,
+        help=(
+            "Abweichende Saison für den Tabellenabruf (z.B. 2025). "
+            "Standard ist die gleiche Saison wie bei den Spielen."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -197,6 +205,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     placeholder_source: Optional[int] = None
     placeholder_only = False
+    requested_season = args.season
     if args.season is not None:
         season = args.season
         if season not in seasons:
@@ -233,9 +242,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         for line in iter_preview(matches, args.preview):
             print("  "+line)
 
+    table_season = args.table_season or requested_season or season
     if args.show_table:
+        if table_season != season:
+            print(
+                "\nTabellen-Saison weicht von den Spielinformationen ab "
+                f"({table_season} statt {season})."
+            )
         print("\nAktuelle Tabelle:")
-        for line in map(format_table_entry, fetch_table(args.league_short, season)):
+        for line in map(
+            format_table_entry, fetch_table(args.league_short, table_season)
+        ):
             print("  "+line)
 
     return 0

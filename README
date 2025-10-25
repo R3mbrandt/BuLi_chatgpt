@@ -28,10 +28,12 @@ steuern:
 ```bash
 python scripts/openligadb_fetch.py --season 2022 --matchday 5
 python scripts/openligadb_fetch.py --league-short bl2 --show-table
+python scripts/openligadb_fetch.py --show-table --table-season 2025
 ```
 
 `bl1` steht für die 1. Bundesliga, `bl2` für die 2. Bundesliga. Eine Übersicht
 aller bekannten Kurzbezeichnungen findest du in der
-[OpenLigaDB-Dokumentation](https://www.openligadb.de/). Das Skript lädt immer
-zunächst die verfügbare Saisontabelle, sodass die aktuelle Saison automatisch
-gefunden wird.
+[OpenLigaDB-Dokumentation](https://www.openligadb.de/). Wenn du eine Tabelle für
+eine andere Saison als die Spielvorschau sehen möchtest (z. B. um eine frisch
+gestartete Saison ohne bestätigte Spielansetzungen anzuzeigen), kannst du dies
+über `--table-season` erzwingen.
