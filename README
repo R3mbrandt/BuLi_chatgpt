@@ -1,1 +1,34 @@
-First File
+# Bundesliga Analytics Prototype
+
+Dieses Repository enthält erste Experimente für ein Bundesliga-Analyse-Setup.
+
+## Voraussetzungen
+
+- Python 3.10+
+- Netzwerkzugang zur frei verfügbaren [OpenLigaDB](https://www.openligadb.de/) API.
+
+## Schneller Test mit OpenLigaDB
+
+Das Skript `scripts/openligadb_fetch.py` ruft exemplarisch Bundesliga-Daten
+über die OpenLigaDB-Endpunkte ab. Es ermittelt verfügbare Saisons, lädt die
+Spiele einer Saison oder eines konkreten Spieltags und gibt optional die Tabelle
+aus. Damit lässt sich ohne kostenpflichtigen API-Zugang ein grundlegender
+Datenabruf prüfen.
+
+```bash
+python scripts/openligadb_fetch.py --preview 8
+```
+
+Über weitere Parameter kannst du Saison, Spieltag oder die Liga-Kurzbezeichnung
+steuern:
+
+```bash
+python scripts/openligadb_fetch.py --season 2022 --matchday 5
+python scripts/openligadb_fetch.py --league-short bl2 --show-table
+```
+
+`bl1` steht für die 1. Bundesliga, `bl2` für die 2. Bundesliga. Eine Übersicht
+aller bekannten Kurzbezeichnungen findest du in der
+[OpenLigaDB-Dokumentation](https://www.openligadb.de/). Das Skript lädt immer
+zunächst die verfügbare Saisontabelle, sodass die aktuelle Saison automatisch
+gefunden wird.
